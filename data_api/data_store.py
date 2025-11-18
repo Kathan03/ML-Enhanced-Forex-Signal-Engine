@@ -67,8 +67,37 @@ class DataStore:
         Raises:
             ValueError: If data schema is invalid
         """
-        # TODO: Implement save logic
-        raise NotImplementedError("To be implemented in Phase 1")
+        # Validate schema
+        self._validate_schema(df)
+
+        # Get filepath
+        if filename is None:
+            filename = self._get_default_filename()
+
+        filepath = self.data_path / filename
+
+        # Handle append mode
+        if append and filepath.exists():
+            print(f"Appending to existing file: {filepath}")
+
+            # Load existing data
+            existing_df = pd.read_csv(filepath)
+            existing_df['timestamp'] = pd.to_datetime(existing_df['timestamp'])
+
+            # Combine with new data
+            combined_df = pd.concat([existing_df, df], ignore_index=True)
+
+            # Remove duplicates (keep last)
+            combined_df = combined_df.drop_duplicates(subset=['timestamp'], keep='last')
+
+            # Sort by timestamp
+            combined_df = combined_df.sort_values('timestamp').reset_index(drop=True)
+
+            df = combined_df
+
+        # Save to CSV
+        df.to_csv(filepath, index=False)
+        print(f"✓ Data saved to: {filepath} ({len(df)} rows)")
 
     def load_data(
         self,
@@ -90,8 +119,42 @@ class DataStore:
         Raises:
             FileNotFoundError: If data file doesn't exist
         """
-        # TODO: Implement load logic
-        raise NotImplementedError("To be implemented in Phase 1")
+        # Get filepath
+        if filename is None:
+            filename = self._get_default_filename()
+
+        filepath = self.data_path / filename
+
+        if not filepath.exists():
+            raise FileNotFoundError(
+                f"Data file not found: {filepath}\n"
+                f"Hint: Fetch data first using ForexDataFetcher"
+            )
+
+        # Load CSV
+        df = pd.read_csv(filepath)
+
+        # Convert timestamp to datetime
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+        # Filter by date range if provided
+        if start_date:
+            start_dt = pd.to_datetime(start_date)
+            df = df[df['timestamp'] >= start_dt]
+
+        if end_date:
+            end_dt = pd.to_datetime(end_date)
+            df = df[df['timestamp'] <= end_dt]
+
+        # Validate schema
+        self._validate_schema(df)
+
+        print(f"✓ Loaded {len(df)} rows from: {filepath}")
+
+        if start_date or end_date:
+            print(f"  Date range: {df['timestamp'].min()} to {df['timestamp'].max()}")
+
+        return df
 
     def data_exists(self, filename: Optional[str] = None) -> bool:
         """
@@ -103,8 +166,11 @@ class DataStore:
         Returns:
             True if file exists, False otherwise
         """
-        # TODO: Implement existence check
-        raise NotImplementedError("To be implemented in Phase 1")
+        if filename is None:
+            filename = self._get_default_filename()
+
+        filepath = self.data_path / filename
+        return filepath.exists()
 
     def get_data_info(self, filename: Optional[str] = None) -> dict:
         """
@@ -116,8 +182,38 @@ class DataStore:
         Returns:
             Dictionary with metadata (date range, row count, last updated)
         """
-        # TODO: Implement metadata retrieval
-        raise NotImplementedError("To be implemented in Phase 1")
+        if filename is None:
+            filename = self._get_default_filename()
+
+        filepath = self.data_path / filename
+
+        if not filepath.exists():
+            return {
+                'exists': False,
+                'filename': filename,
+                'filepath': str(filepath)
+            }
+
+        # Load data to get info
+        df = pd.read_csv(filepath)
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+        # Get file modification time
+        last_modified = datetime.fromtimestamp(filepath.stat().st_mtime)
+
+        info = {
+            'exists': True,
+            'filename': filename,
+            'filepath': str(filepath),
+            'rows': len(df),
+            'start_date': str(df['timestamp'].min()),
+            'end_date': str(df['timestamp'].max()),
+            'last_modified': str(last_modified),
+            'columns': list(df.columns),
+            'file_size_mb': filepath.stat().st_size / (1024 * 1024)
+        }
+
+        return info
 
     def _get_default_filename(self) -> str:
         """
@@ -126,7 +222,9 @@ class DataStore:
         Returns:
             Filename string (e.g., "eurusd_1h.csv")
         """
-        return f"{self.symbol.lower()}_{self.timeframe}.csv"
+        # Clean symbol (remove special characters like =, /)
+        clean_symbol = self.symbol.replace('=', '').replace('/', '').replace('-', '')
+        return f"{clean_symbol.lower()}_{self.timeframe}.csv"
 
     def _validate_schema(self, df: pd.DataFrame) -> bool:
         """
@@ -143,5 +241,28 @@ class DataStore:
         Raises:
             ValueError: If schema is invalid
         """
-        # TODO: Implement schema validation
-        raise NotImplementedError("To be implemented in Phase 1")
+        required_columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+
+        # Check all required columns exist
+        missing_columns = set(required_columns) - set(df.columns)
+        if missing_columns:
+            raise ValueError(
+                f"Missing required columns: {missing_columns}\n"
+                f"Expected columns: {required_columns}\n"
+                f"Found columns: {list(df.columns)}"
+            )
+
+        # Check data types (timestamp should be datetime or convertible)
+        if not pd.api.types.is_datetime64_any_dtype(df['timestamp']):
+            try:
+                pd.to_datetime(df['timestamp'])
+            except Exception as e:
+                raise ValueError(f"'timestamp' column cannot be converted to datetime: {e}")
+
+        # Check numeric columns
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        for col in numeric_cols:
+            if not pd.api.types.is_numeric_dtype(df[col]):
+                raise ValueError(f"Column '{col}' must be numeric, got {df[col].dtype}")
+
+        return True
