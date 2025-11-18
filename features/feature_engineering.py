@@ -77,8 +77,38 @@ class FeatureEngineer:
             4. Add technical indicators
             5. Handle NaN values
         """
-        # TODO: Implement feature creation
-        raise NotImplementedError("To be implemented in Phase 2")
+        print(f"Creating features from {len(df)} bars...")
+
+        # Make a copy to avoid modifying original
+        df = df.copy()
+
+        # 1. Compute returns
+        df = self._compute_returns(df)
+
+        # 2. Compute lagged returns
+        df = self._compute_lagged_returns(df)
+
+        # 3. Compute rolling statistics
+        df = self._compute_rolling_stats(df)
+
+        # 4. Compute technical indicators
+        if "sma" in self.indicators:
+            df = self._compute_sma(df)
+
+        if "rsi" in self.indicators:
+            df = self._compute_rsi(df)
+
+        if "atr" in self.indicators:
+            df = self._compute_atr(df)
+
+        # 5. Handle missing values (drop rows with NaN)
+        initial_rows = len(df)
+        df = self._handle_missing_values(df, method="drop")
+
+        print(f"✓ Features created: {len(df)} rows after cleaning (dropped {initial_rows - len(df)} rows with NaN)")
+        print(f"  Feature columns: {len(self.get_feature_names())}")
+
+        return df
 
     def create_target(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -92,8 +122,28 @@ class FeatureEngineer:
         Returns:
             DataFrame with 'target' column added
         """
-        # TODO: Implement target creation
-        raise NotImplementedError("To be implemented in Phase 2")
+        print(f"Creating target labels (horizon={self.target_horizon})...")
+
+        df = df.copy()
+
+        # Shift close price by -target_horizon to get future price
+        future_close = df['close'].shift(-self.target_horizon)
+
+        # Target: 1 if price goes up, 0 if it goes down
+        df['target'] = (future_close > df['close']).astype(int)
+
+        # Drop rows where target is NaN (last target_horizon rows)
+        initial_rows = len(df)
+        df = df.dropna(subset=['target'])
+
+        # Count target distribution
+        target_counts = df['target'].value_counts()
+        print(f"✓ Target created: {len(df)} rows (dropped last {initial_rows - len(df)} rows)")
+        print(f"  Target distribution: {target_counts.to_dict()}")
+        if len(target_counts) > 1:
+            print(f"  Balance: {target_counts[1] / len(df) * 100:.1f}% UP, {target_counts[0] / len(df) * 100:.1f}% DOWN")
+
+        return df
 
     def _compute_returns(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -109,8 +159,10 @@ class FeatureEngineer:
         Returns:
             DataFrame with return columns added
         """
-        # TODO: Implement returns calculation
-        raise NotImplementedError("To be implemented in Phase 2")
+        df['return'] = df['close'].pct_change()
+        df['log_return'] = np.log(df['close'] / df['close'].shift(1))
+
+        return df
 
     def _compute_lagged_returns(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -125,8 +177,10 @@ class FeatureEngineer:
         Returns:
             DataFrame with lagged return columns
         """
-        # TODO: Implement lagged returns
-        raise NotImplementedError("To be implemented in Phase 2")
+        for lag in self.lagged_returns:
+            df[f'return_lag_{lag}'] = df['return'].shift(lag)
+
+        return df
 
     def _compute_rolling_stats(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -142,8 +196,11 @@ class FeatureEngineer:
         Returns:
             DataFrame with rolling stat columns
         """
-        # TODO: Implement rolling statistics
-        raise NotImplementedError("To be implemented in Phase 2")
+        for window in self.rolling_windows:
+            df[f'return_mean_{window}'] = df['return'].rolling(window=window).mean()
+            df[f'return_std_{window}'] = df['return'].rolling(window=window).std()
+
+        return df
 
     def _compute_sma(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -159,8 +216,12 @@ class FeatureEngineer:
         Returns:
             DataFrame with SMA columns
         """
-        # TODO: Implement SMA calculation
-        raise NotImplementedError("To be implemented in Phase 2")
+        for window in self.rolling_windows:
+            sma = df['close'].rolling(window=window).mean()
+            df[f'sma_{window}'] = sma
+            df[f'price_to_sma_{window}'] = (df['close'] - sma) / sma
+
+        return df
 
     def _compute_rsi(
         self,
@@ -180,8 +241,24 @@ class FeatureEngineer:
         Returns:
             DataFrame with 'rsi' column
         """
-        # TODO: Implement RSI calculation
-        raise NotImplementedError("To be implemented in Phase 2")
+        # Calculate price changes
+        delta = df['close'].diff()
+
+        # Separate gains and losses
+        gain = delta.where(delta > 0, 0)
+        loss = -delta.where(delta < 0, 0)
+
+        # Calculate average gain and loss
+        avg_gain = gain.rolling(window=period).mean()
+        avg_loss = loss.rolling(window=period).mean()
+
+        # Calculate RS and RSI
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+
+        df['rsi'] = rsi
+
+        return df
 
     def _compute_atr(
         self,
@@ -201,8 +278,21 @@ class FeatureEngineer:
         Returns:
             DataFrame with 'atr' and 'atr_pct' (ATR / close) columns
         """
-        # TODO: Implement ATR calculation
-        raise NotImplementedError("To be implemented in Phase 2")
+        # Calculate true range
+        high_low = df['high'] - df['low']
+        high_close = np.abs(df['high'] - df['close'].shift(1))
+        low_close = np.abs(df['low'] - df['close'].shift(1))
+
+        # True range is the max of the three
+        true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+
+        # ATR is the rolling mean of true range
+        atr = true_range.rolling(window=period).mean()
+
+        df['atr'] = atr
+        df['atr_pct'] = atr / df['close']  # Normalized ATR
+
+        return df
 
     def _handle_missing_values(
         self,
@@ -219,8 +309,22 @@ class FeatureEngineer:
         Returns:
             DataFrame with NaN values handled
         """
-        # TODO: Implement NaN handling
-        raise NotImplementedError("To be implemented in Phase 2")
+        if method == "drop":
+            # Drop rows with any NaN in feature columns
+            # Keep timestamp and OHLCV columns even if they have NaN
+            feature_cols = self.get_feature_names()
+
+            # Only drop if feature columns have NaN
+            if feature_cols:
+                df = df.dropna(subset=feature_cols)
+
+            df = df.reset_index(drop=True)
+
+        elif method == "fill":
+            # Forward fill then backward fill
+            df = df.fillna(method='ffill').fillna(method='bfill')
+
+        return df
 
     def get_feature_names(self) -> List[str]:
         """
@@ -229,5 +333,35 @@ class FeatureEngineer:
         Returns:
             List of feature column names (excludes timestamp, OHLCV, target)
         """
-        # TODO: Implement feature name extraction
-        raise NotImplementedError("To be implemented in Phase 2")
+        exclude_cols = ['timestamp', 'open', 'high', 'low', 'close', 'volume', 'target']
+
+        feature_names = []
+
+        # Returns
+        feature_names.extend(['return', 'log_return'])
+
+        # Lagged returns
+        for lag in self.lagged_returns:
+            feature_names.append(f'return_lag_{lag}')
+
+        # Rolling statistics
+        for window in self.rolling_windows:
+            feature_names.append(f'return_mean_{window}')
+            feature_names.append(f'return_std_{window}')
+
+        # SMA
+        if "sma" in self.indicators:
+            for window in self.rolling_windows:
+                feature_names.append(f'sma_{window}')
+                feature_names.append(f'price_to_sma_{window}')
+
+        # RSI
+        if "rsi" in self.indicators:
+            feature_names.append('rsi')
+
+        # ATR
+        if "atr" in self.indicators:
+            feature_names.append('atr')
+            feature_names.append('atr_pct')
+
+        return feature_names
