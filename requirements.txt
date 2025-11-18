@@ -15,8 +15,9 @@ requests>=2.31.0
 joblib>=1.3.0
 
 # Optional: Deep Learning (for LSTM/KAN models)
-# tensorflow>=2.13.0
-# torch>=2.0.0
+tensorflow>=2.13.0
+torch>=2.0.0
+pykan
 
 # Optional: Advanced TA indicators
 ta>=0.11.0
