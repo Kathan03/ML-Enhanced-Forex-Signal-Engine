@@ -2,10 +2,10 @@
 
 # Data Configuration
 data:
-  symbol: "EURUSD"
+  symbol: "EURUSD=X"  # For yfinance: use "EURUSD=X", for others: "EURUSD"
   timeframe: "1h"  # Options: 1m, 5m, 15m, 1h, 4h, 1d
-  api_provider: "twelve_data"  # Options: twelve_data, alpha_vantage, csv
-  api_key: "${FOREX_API_KEY}"  # Set in .env file
+  api_provider: "yfinance"  # Options: yfinance (FREE!), twelve_data, alpha_vantage, csv
+  api_key: "${FOREX_API_KEY}"  # Not needed for yfinance
   historical_bars: 5000
   data_path: "data/raw"
 
