@@ -109,8 +109,49 @@ class SignalEngine:
                 - take_profit
                 - confidence
         """
-        # TODO: Implement signal generation
-        raise NotImplementedError("To be implemented in Phase 3")
+        print(f"Generating signals for {len(df)} bars...")
+
+        signals = []
+
+        for idx, row in df.iterrows():
+            # Skip rows with NaN predictions (e.g., LSTM initial sequence)
+            if pd.isna(row['probability']):
+                continue
+
+            # Determine signal type
+            signal_type = self._determine_signal(row['probability'])
+
+            # Entry price is the close price
+            entry_price = row['close']
+
+            # Get ATR (use default if not available)
+            atr = row.get('atr', 0.002 * entry_price)  # Default 20 pips for EURUSD
+
+            # Calculate SL/TP
+            stop_loss, take_profit = self._calculate_sl_tp(signal_type, entry_price, atr)
+
+            # Confidence is the probability (for BUY) or 1-probability (for SELL)
+            if signal_type == "BUY":
+                confidence = row['probability']
+            elif signal_type == "SELL":
+                confidence = 1 - row['probability']
+            else:  # FLAT
+                confidence = 0.5  # Neutral
+
+            signals.append({
+                'timestamp': row['timestamp'],
+                'symbol': self.symbol,
+                'signal': signal_type,
+                'entry_price': entry_price,
+                'stop_loss': stop_loss,
+                'take_profit': take_profit,
+                'confidence': confidence
+            })
+
+        signals_df = pd.DataFrame(signals)
+
+        print(f"✓ Generated {len(signals_df)} signals")
+        return signals_df
 
     def _determine_signal(self, probability: float) -> str:
         """
@@ -122,8 +163,12 @@ class SignalEngine:
         Returns:
             Signal string: "BUY", "SELL", or "FLAT"
         """
-        # TODO: Implement signal determination logic
-        raise NotImplementedError("To be implemented in Phase 3")
+        if probability > self.buy_threshold:
+            return "BUY"
+        elif probability < self.sell_threshold:
+            return "SELL"
+        else:
+            return "FLAT"
 
     def _calculate_sl_tp(
         self,
@@ -153,8 +198,17 @@ class SignalEngine:
         Returns:
             Tuple of (stop_loss, take_profit)
         """
-        # TODO: Implement SL/TP calculation
-        raise NotImplementedError("To be implemented in Phase 3")
+        if signal == "BUY":
+            stop_loss = entry_price - (atr * self.sl_multiplier)
+            take_profit = entry_price + (atr * self.tp_multiplier)
+        elif signal == "SELL":
+            stop_loss = entry_price + (atr * self.sl_multiplier)
+            take_profit = entry_price - (atr * self.tp_multiplier)
+        else:  # FLAT
+            stop_loss = None
+            take_profit = None
+
+        return stop_loss, take_profit
 
     def export_signals(
         self,
@@ -170,8 +224,17 @@ class SignalEngine:
             filename: Base filename (without extension)
             format: Output format ("csv", "json", or "both")
         """
-        # TODO: Implement signal export
-        raise NotImplementedError("To be implemented in Phase 3")
+        print(f"\nExporting signals (format: {format})...")
+
+        if format in ["csv", "both"]:
+            csv_path = self.output_path / f"{filename}.csv"
+            self._export_to_csv(signals, csv_path)
+
+        if format in ["json", "both"]:
+            json_path = self.output_path / f"{filename}.json"
+            self._export_to_json(signals, json_path)
+
+        print(f"✓ Signals exported successfully")
 
     def _export_to_csv(
         self,
@@ -185,8 +248,8 @@ class SignalEngine:
             signals: DataFrame with signals
             filepath: Full path to CSV file
         """
-        # TODO: Implement CSV export
-        raise NotImplementedError("To be implemented in Phase 3")
+        signals.to_csv(filepath, index=False)
+        print(f"  ✓ CSV saved to: {filepath}")
 
     def _export_to_json(
         self,
@@ -202,8 +265,18 @@ class SignalEngine:
             signals: DataFrame with signals
             filepath: Full path to JSON file
         """
-        # TODO: Implement JSON export
-        raise NotImplementedError("To be implemented in Phase 3")
+        # Convert timestamp to string for JSON serialization
+        signals_copy = signals.copy()
+        signals_copy['timestamp'] = signals_copy['timestamp'].astype(str)
+
+        # Convert to list of dictionaries
+        signals_list = signals_copy.to_dict('records')
+
+        # Write to JSON file
+        with open(filepath, 'w') as f:
+            json.dump(signals_list, f, indent=2)
+
+        print(f"  ✓ JSON saved to: {filepath}")
 
     def filter_signals(
         self,
@@ -222,8 +295,17 @@ class SignalEngine:
         Returns:
             Filtered signals DataFrame
         """
-        # TODO: Implement signal filtering
-        raise NotImplementedError("To be implemented in Phase 3")
+        filtered = signals.copy()
+
+        # Filter by confidence
+        if min_confidence > 0.0:
+            filtered = filtered[filtered['confidence'] >= min_confidence]
+
+        # Exclude FLAT signals
+        if exclude_flat:
+            filtered = filtered[filtered['signal'] != 'FLAT']
+
+        return filtered
 
     def get_signal_statistics(
         self,
@@ -240,5 +322,22 @@ class SignalEngine:
             - flat_count
             - avg_confidence
         """
-        # TODO: Implement signal statistics
-        raise NotImplementedError("To be implemented in Phase 3")
+        stats = {
+            'total_signals': len(signals),
+            'buy_count': len(signals[signals['signal'] == 'BUY']),
+            'sell_count': len(signals[signals['signal'] == 'SELL']),
+            'flat_count': len(signals[signals['signal'] == 'FLAT']),
+            'avg_confidence': signals['confidence'].mean()
+        }
+
+        # Calculate percentages
+        if stats['total_signals'] > 0:
+            stats['buy_pct'] = (stats['buy_count'] / stats['total_signals']) * 100
+            stats['sell_pct'] = (stats['sell_count'] / stats['total_signals']) * 100
+            stats['flat_pct'] = (stats['flat_count'] / stats['total_signals']) * 100
+        else:
+            stats['buy_pct'] = 0.0
+            stats['sell_pct'] = 0.0
+            stats['flat_pct'] = 0.0
+
+        return stats
