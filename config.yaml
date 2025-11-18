@@ -21,26 +21,28 @@ features:
 
 # Model Training
 model:
-  type: "logistic_regression"  # Options: logistic_regression, random_forest, lstm, kan
-  train_test_split: 0.8  # 80% train, 20% test
-  validation_split: 0.2  # From training data
+  type: "logistic_regression"  # Options: logistic_regression, random_forest, lstm
+  train_ratio: 0.8  # 80% train, 20% validation
   random_state: 42
+  model_path: "models"
 
-  # Model-specific parameters
-  logistic_regression:
+  # Model hyperparameters (change based on model type)
+  params:
+    # For Logistic Regression
     C: 1.0
     max_iter: 1000
 
-  random_forest:
-    n_estimators: 100
-    max_depth: 10
-    min_samples_split: 5
+    # For Random Forest (uncomment when using random_forest)
+    # n_estimators: 100
+    # max_depth: 10
+    # min_samples_split: 5
 
-  lstm:
-    sequence_length: 50
-    hidden_units: 64
-    epochs: 50
-    batch_size: 32
+    # For LSTM (uncomment when using lstm)
+    # sequence_length: 20
+    # lstm_units: 50
+    # dropout: 0.2
+    # epochs: 50
+    # batch_size: 32
 
 # Signal Generation
 signals:
